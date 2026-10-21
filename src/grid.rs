@@ -214,6 +214,16 @@ impl Grid {
         self.rows.iter_mut()
     }
 
+    /// Row `index` of the scrollback and the screen taken together, the
+    /// oldest scrollback row first, wherever the scrollback is scrolled to.
+    pub fn line(&self, index: usize) -> Option<&crate::row::Row> {
+        let history = self.scrollback_len();
+        match &self.scrollback {
+            Some(s) if index < history => s.rows.get(index),
+            _ => self.rows.get(index - history),
+        }
+    }
+
     pub fn visible_row(&self, row: u16) -> Option<&crate::row::Row> {
         // Indexes directly into what `visible_rows` iterates: `nth` on its
         // chained iterator steps through every row before this one.
