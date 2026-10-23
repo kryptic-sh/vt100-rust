@@ -103,6 +103,11 @@ pub struct Screen {
     /// still holding its number links to nothing rather than a later link.
     hyperlinks: Vec<Option<Hyperlink>>,
 
+    /// Rewrap the normal screen's rows to a new width ([`Screen::set_reflow`]).
+    reflow: bool,
+    /// What the last reflow did, until [`Screen::take_reflow`] takes it.
+    reflowed: Option<crate::grid::Reflow>,
+
     modes: u8,
     mouse_protocol_mode: MouseProtocolMode,
     mouse_protocol_encoding: MouseProtocolEncoding,
@@ -136,6 +141,9 @@ impl Screen {
             link: 0,
             hyperlinks: Vec::new(),
 
+            reflow: false,
+            reflowed: None,
+
             modes: 0,
             mouse_protocol_mode: MouseProtocolMode::default(),
             mouse_protocol_encoding: MouseProtocolEncoding::default(),
@@ -157,9 +165,59 @@ impl Screen {
         rows: core::num::NonZeroU16,
         cols: core::num::NonZeroU16,
     ) {
-        self.grid.set_size(crate::grid::Size { rows, cols }, |_| {});
-        self.alternate_grid
-            .set_size(crate::grid::Size { rows, cols }, |_| {});
+        self.resize(crate::grid::Size { rows, cols }, |_| {}, |_| {});
+    }
+
+    /// Sets whether a change of width rewraps the normal screen's rows (its
+    /// history's too), as tmux's reflow: the rows of each line as written
+    /// are joined and split again at the new width, and the cursor keeps
+    /// its place in its line. While the alternate screen shows, the normal
+    /// screen keeps its size, and is resized (and rewrapped) as the
+    /// alternate screen goes. Off by default.
+    pub fn set_reflow(&mut self, reflow: bool) {
+        self.reflow = reflow;
+    }
+
+    /// Takes what the last reflow did to the normal screen's lines (see
+    /// [`Screen::set_reflow`]), if one has happened since it was last taken.
+    pub fn take_reflow(&mut self) -> Option<crate::grid::Reflow> {
+        self.reflowed.take()
+    }
+
+    /// Resize both grids, `on_normal` and `on_alternate` told of each row
+    /// a smaller height pushes into a history.
+    pub(crate) fn resize(
+        &mut self,
+        size: crate::grid::Size,
+        mut on_normal: impl FnMut(&crate::row::Row),
+        on_alternate: impl FnMut(&crate::row::Row),
+    ) {
+        if !(self.reflow && self.mode(MODE_ALTERNATE_SCREEN)) {
+            self.resize_normal(size, &mut on_normal);
+        }
+        self.alternate_grid.set_size(size, on_alternate);
+    }
+
+    /// Resize the normal grid: its height first, then its width, its rows
+    /// rewrapped where reflow is on, as tmux's `screen_resize_cursor`.
+    fn resize_normal(
+        &mut self,
+        size: crate::grid::Size,
+        on_row: impl FnMut(&crate::row::Row),
+    ) {
+        let cols = self.grid.size().cols;
+        if self.reflow && size.cols != cols {
+            self.grid.set_size(
+                crate::grid::Size {
+                    rows: size.rows,
+                    cols,
+                },
+                on_row,
+            );
+            self.reflowed = Some(self.grid.reflow(size.cols.get()));
+        } else {
+            self.grid.set_size(size, on_row);
+        }
     }
 
     /// Returns the current size of the terminal.
@@ -906,6 +964,12 @@ impl Screen {
 
     fn exit_alternate_grid(&mut self) {
         self.clear_mode(MODE_ALTERNATE_SCREEN);
+        // Resized while the alternate screen showed: the normal screen takes
+        // the size now, as tmux's `screen_alternate_off`.
+        let size = self.alternate_grid.size();
+        if self.reflow && self.grid.size() != size {
+            self.resize_normal(size, |_| {});
+        }
     }
 
     fn save_cursor(&mut self) {
@@ -1157,16 +1221,18 @@ impl<CB: crate::Callbacks> WrappedScreen<CB> {
         rows: core::num::NonZeroU16,
         cols: core::num::NonZeroU16,
     ) {
-        let callbacks = &mut self.callbacks;
-        self.screen
-            .grid
-            .set_size(crate::grid::Size { rows, cols }, |row| {
-                callbacks.on_scroll(crate::capture::RowContents(row), false);
-            });
-        self.screen.alternate_grid.set_size(
+        let callbacks = core::cell::RefCell::new(&mut self.callbacks);
+        self.screen.resize(
             crate::grid::Size { rows, cols },
             |row| {
-                callbacks.on_scroll(crate::capture::RowContents(row), true);
+                callbacks
+                    .borrow_mut()
+                    .on_scroll(crate::capture::RowContents(row), false);
+            },
+            |row| {
+                callbacks
+                    .borrow_mut()
+                    .on_scroll(crate::capture::RowContents(row), true);
             },
         );
     }

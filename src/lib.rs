@@ -65,6 +65,7 @@ mod term;
 pub use attrs::Color;
 pub use callbacks::Callbacks;
 pub use cell::Cell;
+pub use grid::Reflow;
 pub use parser::Parser;
 pub use screen::{
     CursorStyle, Hyperlink, MouseProtocolEncoding, MouseProtocolMode, Screen,

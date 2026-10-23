@@ -1,3 +1,7 @@
+mod reflow;
+
+pub use reflow::Reflow;
+
 use crate::term::BufWrite as _;
 use alloc::{string::String, vec::Vec};
 

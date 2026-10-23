@@ -15,6 +15,20 @@ impl Row {
         }
     }
 
+    /// A row holding `cells`, which goes on into the next if `wrapped`.
+    pub fn from_cells(cells: Vec<crate::Cell>, wrapped: bool) -> Self {
+        Self { cells, wrapped }
+    }
+
+    /// How many of its cells were written: up to the last that is not
+    /// blank, as tmux counts a line's used cells.
+    pub fn used(&self) -> usize {
+        self.cells
+            .iter()
+            .rposition(|c| !c.is_default())
+            .map_or(0, |i| i + 1)
+    }
+
     fn cols(&self) -> u16 {
         self.cells
             .len()
