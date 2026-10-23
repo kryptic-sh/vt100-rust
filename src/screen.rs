@@ -1500,7 +1500,10 @@ impl<CB: crate::Callbacks> WrappedScreen<CB> {
                 [1] => screen.attrs.set_bold(),
                 [2] => screen.attrs.set_dim(),
                 [3] => screen.attrs.set_italic(true),
-                [4] => screen.attrs.set_underline(true),
+                // An underline style (4:1 single to 4:5 dashed) underlines,
+                // 4:0 stops it; double underline (21) underlines too.
+                [4 | 21] => screen.attrs.set_underline(true),
+                [4, style] => screen.attrs.set_underline(*style != 0),
                 [7] => screen.attrs.set_inverse(true),
                 [22] => screen.attrs.set_normal_intensity(),
                 [23] => screen.attrs.set_italic(false),
@@ -1509,7 +1512,7 @@ impl<CB: crate::Callbacks> WrappedScreen<CB> {
                 [n] if (30..=37).contains(n) => {
                     screen.attrs.fgcolor = crate::Color::Idx(to_u8!(*n) - 30);
                 }
-                [38, 2, r, g, b] => {
+                [38, 2, r, g, b] | [38, 2, _, r, g, b] => {
                     screen.attrs.fgcolor =
                         crate::Color::Rgb(to_u8!(*r), to_u8!(*g), to_u8!(*b));
                 }
@@ -1538,7 +1541,7 @@ impl<CB: crate::Callbacks> WrappedScreen<CB> {
                 [n] if (40..=47).contains(n) => {
                     screen.attrs.bgcolor = crate::Color::Idx(to_u8!(*n) - 40);
                 }
-                [48, 2, r, g, b] => {
+                [48, 2, r, g, b] | [48, 2, _, r, g, b] => {
                     screen.attrs.bgcolor =
                         crate::Color::Rgb(to_u8!(*r), to_u8!(*g), to_u8!(*b));
                 }
@@ -1564,6 +1567,26 @@ impl<CB: crate::Callbacks> WrappedScreen<CB> {
                 [49] => {
                     screen.attrs.bgcolor = crate::Color::Default;
                 }
+                // An underline colour, which is not kept: its parameters
+                // are passed over so the rest of the sequence still applies.
+                [58, 2, _, _, _]
+                | [58, 2, _, _, _, _]
+                | [58, 5, _]
+                | [59] => {}
+                [58] => match next_param!() {
+                    [2] => {
+                        next_param!();
+                        next_param!();
+                        next_param!();
+                    }
+                    [5] => {
+                        next_param!();
+                    }
+                    _ => {
+                        unhandled(self);
+                        return;
+                    }
+                },
                 [n] if (90..=97).contains(n) => {
                     screen.attrs.fgcolor = crate::Color::Idx(to_u8!(*n) - 82);
                 }
