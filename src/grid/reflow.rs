@@ -157,8 +157,15 @@ impl super::Grid {
 
 /// Cells laid out in rows `cols` wide, a wide character that would not fit
 /// at a row's end going to the next (that cell left blank).
+///
+/// Where a row ends is counted as tmux's `grid_reflow` counts it: a wide
+/// character takes two columns and the cell after it, its padding in tmux's
+/// grid, one more, so a row with a wide character in it ends a column
+/// sooner than it would need to.
 struct Placer {
     cols: u16,
+    /// The columns of this row taken, as tmux counts them.
+    counted: usize,
     /// The first of these rows' numbers among all the rows.
     base: usize,
     done: Vec<Row>,
@@ -172,10 +179,12 @@ impl Placer {
             base,
             done: Vec::new(),
             cells: Vec::new(),
+            counted: 0,
         }
     }
 
     fn break_row(&mut self) {
+        self.counted = 0;
         let mut cells = core::mem::take(&mut self.cells);
         cells.resize(usize::from(self.cols), crate::Cell::new());
         self.done.push(Row::from_cells(cells, true));
@@ -184,11 +193,18 @@ impl Placer {
     /// Place `cell`; where it went (its row among all rows, its column).
     fn put(&mut self, cell: &crate::Cell) -> (usize, usize) {
         let cols = usize::from(self.cols);
-        let full = self.cells.len() >= cols
-            || (cell.is_wide() && cols > 1 && self.cells.len() + 1 >= cols);
-        if full {
+        // A wide character with the cell after it, or one cell.
+        let need = if cell.is_wide() {
+            3
+        } else if cell.is_wide_continuation() {
+            0
+        } else {
+            1
+        };
+        if need > 0 && !self.cells.is_empty() && self.counted + need > cols {
             self.break_row();
         }
+        self.counted += need;
         let col = self.cells.len();
         self.cells.push(cell.clone());
         (self.base + self.done.len(), col)

@@ -119,3 +119,22 @@ fn without_reflow_a_resize_cuts_rows_as_before() {
     assert_eq!(screen_rows(&parser), ["abcdefghij", "uvwxy", ""]);
     assert!(parser.screen_mut().take_reflow().is_none());
 }
+
+#[test]
+fn a_wide_character_counts_three_columns_as_in_tmuxs_reflow() {
+    let mut parser = reflowing(4, 20, 10);
+    parser.process("abc中def".as_bytes());
+    resize(&mut parser, 4, 4);
+    let lines: Vec<String> = (0..parser.screen().scrollback_len() + 4)
+        .map(|l| {
+            parser
+                .screen()
+                .line_cells(l)
+                .unwrap()
+                .iter()
+                .map(vt100::Cell::contents)
+                .collect()
+        })
+        .collect();
+    assert_eq!(lines[..3], ["abc", "中d", "ef"]);
+}
