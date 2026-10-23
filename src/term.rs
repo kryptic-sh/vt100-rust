@@ -151,7 +151,8 @@ pub struct Attrs {
     bgcolor: Option<crate::Color>,
     intensity: Option<Intensity>,
     italic: Option<bool>,
-    underline: Option<bool>,
+    underline: Option<crate::attrs::UnderlineStyle>,
+    ulcolor: Option<crate::Color>,
     inverse: Option<bool>,
 }
 
@@ -176,8 +177,16 @@ impl Attrs {
         self
     }
 
-    pub fn underline(mut self, underline: bool) -> Self {
-        self.underline = Some(underline);
+    pub fn underline_style(
+        mut self,
+        style: crate::attrs::UnderlineStyle,
+    ) -> Self {
+        self.underline = Some(style);
+        self
+    }
+
+    pub fn ulcolor(mut self, ulcolor: crate::Color) -> Self {
+        self.ulcolor = Some(ulcolor);
         self
     }
 
@@ -199,6 +208,7 @@ impl BufWrite for Attrs {
             && self.intensity.is_none()
             && self.italic.is_none()
             && self.underline.is_none()
+            && self.ulcolor.is_none()
             && self.inverse.is_none()
         {
             return Ok(());
@@ -286,11 +296,35 @@ impl BufWrite for Attrs {
             }
         }
 
-        if let Some(underline) = self.underline {
-            if underline {
-                write_param!(4);
-            } else {
-                write_param!(24);
+        // As tmux writes them: a single underline as 4, another style as
+        // 4:n, the colour as 58;2;r;g;b or 58;5;n.
+        if let Some(style) = self.underline {
+            match style {
+                crate::attrs::UnderlineStyle::None => write_param!(24),
+                crate::attrs::UnderlineStyle::Single => write_param!(4),
+                style => {
+                    write_param!(4);
+                    writer.write_char(':')?;
+                    write_itoa(writer, style.sgr())?;
+                }
+            }
+        }
+
+        if let Some(ulcolor) = self.ulcolor {
+            match ulcolor {
+                crate::Color::Default => write_param!(59),
+                crate::Color::Idx(i) => {
+                    write_param!(58);
+                    write_param!(5);
+                    write_param!(i);
+                }
+                crate::Color::Rgb(r, g, b) => {
+                    write_param!(58);
+                    write_param!(2);
+                    write_param!(r);
+                    write_param!(g);
+                    write_param!(b);
+                }
             }
         }
 

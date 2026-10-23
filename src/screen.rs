@@ -1671,10 +1671,18 @@ impl<CB: crate::Callbacks> WrappedScreen<CB> {
                 [1] => screen.attrs.set_bold(),
                 [2] => screen.attrs.set_dim(),
                 [3] => screen.attrs.set_italic(true),
-                // An underline style (4:1 single to 4:5 dashed) underlines,
-                // 4:0 stops it; double underline (21) underlines too.
-                [4 | 21] => screen.attrs.set_underline(true),
-                [4, style] => screen.attrs.set_underline(*style != 0),
+                [4] => screen.attrs.set_underline(true),
+                [21] => screen.attrs.set_underline_style(
+                    crate::attrs::UnderlineStyle::Double,
+                ),
+                // 4:0 stops the underline, 4:1 to 4:5 choose its style.
+                [4, style] => {
+                    if let Some(style) =
+                        crate::attrs::UnderlineStyle::from_sgr(*style)
+                    {
+                        screen.attrs.set_underline_style(style);
+                    }
+                }
                 [7] => screen.attrs.set_inverse(true),
                 [22] => screen.attrs.set_normal_intensity(),
                 [23] => screen.attrs.set_italic(false),
@@ -1738,26 +1746,32 @@ impl<CB: crate::Callbacks> WrappedScreen<CB> {
                 [49] => {
                     screen.attrs.bgcolor = crate::Color::Default;
                 }
-                // An underline colour, which is not kept: its parameters
-                // are passed over so the rest of the sequence still applies.
-                [58, 2, _, _, _]
-                | [58, 2, _, _, _, _]
-                | [58, 5, _]
-                | [59] => {}
+                [58, 2, r, g, b] | [58, 2, _, r, g, b] => {
+                    screen.attrs.ulcolor =
+                        crate::Color::Rgb(to_u8!(*r), to_u8!(*g), to_u8!(*b));
+                }
+                [58, 5, i] => {
+                    screen.attrs.ulcolor = crate::Color::Idx(to_u8!(*i));
+                }
                 [58] => match next_param!() {
                     [2] => {
-                        next_param!();
-                        next_param!();
-                        next_param!();
+                        let r = next_param_u8!();
+                        let g = next_param_u8!();
+                        let b = next_param_u8!();
+                        screen.attrs.ulcolor = crate::Color::Rgb(r, g, b);
                     }
                     [5] => {
-                        next_param!();
+                        screen.attrs.ulcolor =
+                            crate::Color::Idx(next_param_u8!());
                     }
                     _ => {
                         unhandled(self);
                         return;
                     }
                 },
+                [59] => {
+                    screen.attrs.ulcolor = crate::Color::Default;
+                }
                 [n] if (90..=97).contains(n) => {
                     screen.attrs.fgcolor = crate::Color::Idx(to_u8!(*n) - 82);
                 }

@@ -17,7 +17,7 @@ pub struct Cell {
     /// the screen's hyperlinks plus one; 0 for none.
     link: u16,
 }
-const _: () = assert!(core::mem::size_of::<Cell>() == 32);
+const _: () = assert!(core::mem::size_of::<Cell>() == 36);
 
 impl PartialEq<Self> for Cell {
     fn eq(&self, other: &Self) -> bool {
@@ -214,6 +214,19 @@ impl Cell {
     #[must_use]
     pub fn underline(&self) -> bool {
         self.attrs.underline()
+    }
+
+    /// Returns how the cell is underlined (SGR 4 and its styles, 21).
+    #[must_use]
+    pub fn underline_style(&self) -> crate::UnderlineStyle {
+        self.attrs.underline_style()
+    }
+
+    /// Returns the colour of the cell's underline (SGR 58); `Default` for
+    /// the text's own.
+    #[must_use]
+    pub fn underline_color(&self) -> crate::Color {
+        self.attrs.ulcolor
     }
 
     /// Returns whether the cell should be rendered with the inverse text

@@ -59,3 +59,38 @@ fn underline_styles_colours_and_colon_forms() {
         vt100::Color::Rgb(4, 5, 6)
     );
 }
+
+#[test]
+fn underline_styles_and_colours_are_kept() {
+    use vt100::{Color, UnderlineStyle};
+    let mut parser = vt100::Parser::default();
+    parser.process(
+        b"\x1b[4:3;58:2::255:0:0ma\x1b[21;58;5;4mb\x1b[4:5;59mc\x1b[24md\x1b[4me\x1b[0mf",
+    );
+    let kept = |p: &vt100::Parser| -> Vec<(UnderlineStyle, Color)> {
+        (0..6)
+            .map(|col| {
+                let cell = p.screen().cell(0, col).unwrap();
+                (cell.underline_style(), cell.underline_color())
+            })
+            .collect()
+    };
+    assert_eq!(
+        kept(&parser),
+        [
+            (UnderlineStyle::Curly, Color::Rgb(255, 0, 0)),
+            (UnderlineStyle::Double, Color::Idx(4)),
+            (UnderlineStyle::Dashed, Color::Default),
+            (UnderlineStyle::None, Color::Default),
+            (UnderlineStyle::Single, Color::Default),
+            (UnderlineStyle::None, Color::Default),
+        ]
+    );
+
+    // Written out as tmux writes them, and read back the same.
+    let formatted = parser.screen().contents_formatted();
+    assert!(formatted.contains("4:3;58;2;255;0;0"), "{formatted:?}");
+    let mut again = vt100::Parser::default();
+    again.process(formatted.as_bytes());
+    assert_eq!(kept(&again), kept(&parser));
+}
