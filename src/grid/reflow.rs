@@ -194,12 +194,10 @@ impl Placer {
     fn put(&mut self, cell: &crate::Cell) -> (usize, usize) {
         let cols = usize::from(self.cols);
         // A wide character with the cell after it, or one cell.
-        let need = if cell.is_wide() {
-            3
-        } else if cell.is_wide_continuation() {
-            0
-        } else {
-            1
+        let need = match (cell.is_wide(), cell.is_wide_continuation()) {
+            (true, _) => 3,
+            (_, true) => 0,
+            _ => 1,
         };
         if need > 0 && !self.cells.is_empty() && self.counted + need > cols {
             self.break_row();
